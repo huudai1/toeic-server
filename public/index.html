@@ -37,10 +37,12 @@
     <form id="quizForm" class="hidden">
       <div class="mb-6">
         <h2 class="text-xl font-bold">Phần 1</h2>
+        <p class="text-gray-600 mb-4">Câu hỏi từ 7 đến 31 (Phần 1)</p>
         <div id="section1" class="space-y-4"></div>
       </div>
       <div class="mb-6">
         <h2 class="text-xl font-bold">Phần 2</h2>
+        <p class="text-gray-600 mb-4">Câu hỏi từ 7 đến 31 (Phần 2)</p>
         <div id="section2" class="space-y-4"></div>
       </div>
       <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Nộp bài</button>
@@ -66,11 +68,11 @@
     const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
     const socket = new WebSocket(wsProtocol + location.host);
 
-    const createQuestion = (id, text) => {
+    const createQuestion = (id, text, section) => {
       const div = document.createElement("div");
       div.className = "bg-gray-50 p-4 rounded border";
       div.innerHTML = `
-        <label class="font-semibold">${text}</label>
+        <label class="font-semibold">${text} (Phần ${section})</label>
         <div class="mt-2 space-y-2">
           <label class="block"><input type="radio" name="${id}" value="A" class="mr-2"> A</label>
           <label class="block"><input type="radio" name="${id}" value="B" class="mr-2"> B</label>
@@ -82,8 +84,8 @@
     };
 
     for (let i = 7; i <= 31; i++) {
-      section1.appendChild(createQuestion(`q${i}`, `Câu ${i}`));
-      section2.appendChild(createQuestion(`q${i}_2`, `Câu ${i}`));
+      section1.appendChild(createQuestion(`q${i}`, `Câu ${i}`, 1));
+      section2.appendChild(createQuestion(`q${i}_2`, `Câu ${i}`, 2));
     }
 
     if (isAdmin) {
