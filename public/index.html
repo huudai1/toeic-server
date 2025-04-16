@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOEIC Listening Quiz</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        #audio-player {
+            position: fixed;
+            top: 10px;
+            left: 20px;
+            z-index: 1000;
+        }
+        #login, #quiz, #admin-controls, #results {
+            max-width: 800px;
+            margin: 60px auto 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .question {
+            margin: 20px 0;
+        }
+        .option {
+            margin: 10px 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+        }
+        input[type="text"] {
+            padding: 8px;
+            margin: 10px 0;
+            width: 200px;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <audio id="audio-player" controls>
+        <source src="/audio.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <div id="login">
+        <h2>TOEIC Listening Quiz</h2>
+        <input type="text" id="username" placeholder="Enter your username" />
+        <button onclick="login()">Join Quiz</button>
+    </div>
+
+    <div id="quiz" class="hidden">
+        <h2>Listening Quiz</h2>
+        <div id="status">Waiting for admin to start the quiz...</div>
+        <form id="quiz-form" class="hidden">
+            <div id="questions"></div>
+            <button type="submit">Submit</button>
+        </form>
+    </div>
+
+    <div id="admin-controls" class="hidden">
+        <h2>Admin Controls</h2>
+        <button onclick="startQuiz()">Start Quiz</button>
+        <button onclick="endQuiz()">End Quiz</button>
+    </div>
+
+    <div id="results" class="hidden">
+        <h2>Results</h2>
+        <table id="results-table" border="1">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        const ws = new WebSocket(`ws://${window.location.host}`);
+        let isAdmin = false;
+        let username = '';
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'start') {
+                document.getElementById('status').classList.add('hidden');
+                document.getElementById('quiz-form').classList.remove('hidden');
+            } else if (data.type === 'end') {
+                document.getElementById('quiz').classList.add('hidden');
+                document.getElementById('admin-controls').classList.add('hidden');
+                fetchResults();
+            }
+        };
+
+        function login() {
+            username = document.getElementById('username').value.trim();
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+            document.getElementById('login').classList.add('hidden');
+            document.getElementById('quiz').classList.remove('hidden');
+            if (username.toLowerCase() === 'admin') {
+                isAdmin = true;
+                document.getElementById('admin-controls').classList.remove('hidden');
+            }
+            loadQuestions();
+        }
+
+        function loadQuestions() {
+            const questionsDiv = document.getElementById('questions');
+            const questions = [
+                {"id": 1, "text": "Which of the following is the correct answer for question 7 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 2, "text": "According to the provided text, what is the correct answer for question 8 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 3, "text": "In the first set, what is the designated correct answer for question 9?", "options": ["A", "B", "C", "D"]},
+                {"id": 4, "text": "What answer corresponds to question 10 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 5, "text": "For question 11 in the first set, which option is identified as the correct answer?", "options": ["A", "B", "C", "D"]},
+                {"id": 6, "text": "What is the correct answer indicated for question 12 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 7, "text": "According to the data, which answer is correct for question 13 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 8, "text": "Question 14 in the first set has which of the following as the correct answer?", "options": ["A", "B", "C", "D"]},
+                {"id": 9, "text": "What is the correct choice for question 15 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 10, "text": "Which letter represents the correct answer for question 16 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 11, "text": "What answer is deemed correct for question 17 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 12, "text": "As per the provided information, the answer to question 18 in the first set is:", "options": ["A", "B", "C", "D"]},
+                {"id": 13, "text": "Which is the right answer for question 19 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 14, "text": "What is the correct answer for question 20 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 15, "text": "What letter choice correctly answers question 21 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 16, "text": "Question 22 in the first set is best answered by:", "options": ["A", "B", "C", "D"]},
+                {"id": 17, "text": "Question 23 in the first set has which option as the correct answer?", "options": ["A", "B", "C", "D"]},
+                {"id": 18, "text": "Which option is the right answer for question 24 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 19, "text": "What is the correct answer to question 25 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 20, "text": "Which of the provided options is the correct answer for question 26 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 21, "text": "What answer choice accurately reflects the correct answer for question 27 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 22, "text": "In the first set, what is the designated correct answer for question 28?", "options": ["A", "B", "C", "D"]},
+                {"id": 23, "text": "For question 29 in the first set, which option is identified as the correct answer?", "options": ["A", "B", "C", "D"]},
+                {"id": 24, "text": "What is the correct answer indicated for question 30 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 25, "text": "According to the data, which answer is correct for question 31 in the first set?", "options": ["A", "B", "C", "D"]},
+                {"id": 26, "text": "Which of the following is the correct answer for question 7 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 27, "text": "According to the provided text, what is the correct answer for question 8 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 28, "text": "In the second set, what is the designated correct answer for question 9?", "options": ["A", "B", "C", "D"]},
+                {"id": 29, "text": "What answer corresponds to question 10 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 30, "text": "For question 11 in the second set, which option is identified as the correct answer?", "options": ["A", "B", "C", "D"]},
+                {"id": 31, "text": "What is the correct answer indicated for question 12 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 32, "text": "According to the data, which answer is correct for question 13 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 33, "text": "Question 14 in the second set has which of the following as the correct answer?", "options": ["A", "B", "C", "D"]},
+                {"id": 34, "text": "What is the correct choice for question 15 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 35, "text": "Which letter represents the correct answer for question 16 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 36, "text": "What answer is deemed correct for question 17 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 37, "text": "As per the provided information, the answer to question 18 in the second set is:", "options": ["A", "B", "C", "D"]},
+                {"id": 38, "text": "Which is the right answer for question 19 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 39, "text": "What is the correct answer for question 20 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 40, "text": "What letter choice correctly answers question 21 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 41, "text": "Question 22 in the second set is best answered by:", "options": ["A", "B", "C", "D"]},
+                {"id": 42, "text": "Question 23 in the second set has which option as the correct answer?", "options": ["A", "B", "C", "D"]},
+                {"id": 43, "text": "Which option is the right answer for question 24 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 44, "text": "What is the correct answer to question 25 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 45, "text": "Which of the provided options is the correct answer for question 26 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 46, "text": "What answer choice accurately reflects the correct answer for question 27 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 47, "text": "In the second set, what is the designated correct answer for question 28?", "options": ["A", "B", "C", "D"]},
+                {"id": 48, "text": "For question 29 in the second set, which option is identified as the correct answer?", "options": ["A", "B", "C", "D"]},
+                {"id": 49, "text": "What is the correct answer indicated for question 30 in the second set?", "options": ["A", "B", "C", "D"]},
+                {"id": 50, "text": "According to the data, which answer is correct for question 31 in the second set?", "options": ["A", "B", "C", "D"]}
+            ];
+
+            questions.forEach(q => {
+                const div = document.createElement('div');
+                div.className = 'question';
+                div.innerHTML = `
+                    <p><strong>Question ${q.id}:</strong> ${q.text}</p>
+                    ${q.options.map((opt, i) => `
+                        <div class="option">
+                            <input type="radio" name="q${q.id}" value="${opt}" id="q${q.id}-${opt}">
+                            <label for="q${q.id}-${opt}">${opt}</label>
+                        </div>
+                    `).join('')}
+                `;
+                questionsDiv.appendChild(div);
+            });
+        }
+
+        function startQuiz() {
+            if (isAdmin) {
+                ws.send(JSON.stringify({ type: 'start' }));
+            }
+        }
+
+        function endQuiz() {
+            if (isAdmin) {
+                ws.send(JSON.stringify({ type: 'end' }));
+            }
+        }
+
+        document.getElementById('quiz-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const answers = {};
+            formData.forEach((value, key) => {
+                answers[key] = value;
+            });
+
+            const response = await fetch('/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, answers })
+            });
+            const result = await response.json();
+            alert(`Your score: ${result.score}/50`);
+            document.getElementById('quiz').classList.add('hidden');
+        });
+
+        async function fetchResults() {
+            const response = await fetch('/results');
+            const results = await response.json();
+            const tbody = document.getElementById('results-table').querySelector('tbody');
+            tbody.innerHTML = '';
+            results.forEach(r => {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>${r.username}</td><td>${r.score}</td>`;
+                tbody.appendChild(row);
+            });
+            document.getElementById('results').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
