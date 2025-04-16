@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,6 +16,11 @@
             top: 10px;
             left: 20px;
             z-index: 1000;
+            max-width: 300px;
+            background: #fff;
+            padding: 5px;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
         }
         #login, #quiz, #admin-controls, #results {
             max-width: 800px;
@@ -35,51 +40,69 @@
             padding: 10px 20px;
             margin: 10px;
             cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
         }
         input[type="text"] {
             padding: 8px;
             margin: 10px 0;
             width: 200px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
         }
         .hidden {
             display: none;
         }
+        #results-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        #results-table th, #results-table td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
     </style>
 </head>
 <body>
-    <audio id="audio-player" controls>
+    <audio id="audio-player" controls onerror="console.error('Audio load failed')">
         <source src="/audio.mp3" type="audio/mpeg">
-        Your browser does not support the audio element.
+        Trình duyệt của bạn không hỗ trợ phát âm thanh.
     </audio>
 
     <div id="login">
-        <h2>TOEIC Listening Quiz</h2>
-        <input type="text" id="username" placeholder="Enter your username" />
-        <button onclick="login()">Join Quiz</button>
+        <h2>Bài kiểm tra nghe TOEIC</h2>
+        <input type="text" id="username" placeholder="Nhập tên đăng nhập" />
+        <button onclick="login()">Tham gia</button>
     </div>
 
     <div id="quiz" class="hidden">
-        <h2>Listening Quiz</h2>
-        <div id="status">Waiting for admin to start the quiz...</div>
+        <h2>Bài kiểm tra nghe</h2>
+        <div id="status">Đang đợi admin bắt đầu bài kiểm tra...</div>
         <form id="quiz-form" class="hidden">
             <div id="questions"></div>
-            <button type="submit">Submit</button>
+            <button type="submit">Nộp bài</button>
         </form>
     </div>
 
     <div id="admin-controls" class="hidden">
-        <h2>Admin Controls</h2>
-        <button onclick="startQuiz()">Start Quiz</button>
-        <button onclick="endQuiz()">End Quiz</button>
+        <h2>Điều khiển Admin</h2>
+        <button onclick="startQuiz()">Bắt đầu bài kiểm tra</button>
+        <button onclick="endQuiz()">Kết thúc bài kiểm tra</button>
     </div>
 
     <div id="results" class="hidden">
-        <h2>Results</h2>
+        <h2>Kết quả</h2>
         <table id="results-table" border="1">
             <thead>
                 <tr>
-                    <th>Username</th>
-                    <th>Score</th>
+                    <th>Tên đăng nhập</th>
+                    <th>Điểm</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -87,97 +110,121 @@
     </div>
 
     <script>
-        const ws = new WebSocket(`ws://${window.location.host}`);
+        let ws;
         let isAdmin = false;
         let username = '';
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'start') {
-                document.getElementById('status').classList.add('hidden');
-                document.getElementById('quiz-form').classList.remove('hidden');
-            } else if (data.type === 'end') {
-                document.getElementById('quiz').classList.add('hidden');
-                document.getElementById('admin-controls').classList.add('hidden');
-                fetchResults();
-            }
-        };
+        function connectWebSocket() {
+            ws = new WebSocket(`wss://${window.location.host}`);
+            ws.onopen = () => console.log('WebSocket connected');
+            ws.onerror = (error) => console.error('WebSocket error:', error);
+            ws.onclose = () => console.log('WebSocket disconnected');
+            ws.onmessage = (event) => {
+                console.log('WebSocket message:', event.data);
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'start') {
+                        document.getElementById('status').classList.add('hidden');
+                        document.getElementById('quiz-form').classList.remove('hidden');
+                    } else if (data.type === 'end') {
+                        document.getElementById('quiz').classList.add('hidden');
+                        document.getElementById('admin-controls').classList.add('hidden');
+                        fetchResults();
+                    }
+                } catch (error) {
+                    console.error('WebSocket message parse error:', error);
+                }
+            };
+        }
+
+        connectWebSocket();
 
         function login() {
+            console.log('Login clicked');
             username = document.getElementById('username').value.trim();
+            console.log('Username:', username);
             if (!username) {
-                alert('Please enter a username');
+                alert('Vui lòng nhập tên đăng nhập');
+                console.log('No username entered');
                 return;
             }
             document.getElementById('login').classList.add('hidden');
+            console.log('Hiding login');
             document.getElementById('quiz').classList.remove('hidden');
+            console.log('Showing quiz');
             if (username.toLowerCase() === 'admin') {
                 isAdmin = true;
                 document.getElementById('admin-controls').classList.remove('hidden');
+                console.log('Admin controls shown');
             }
             loadQuestions();
         }
 
         function loadQuestions() {
+            console.log('Loading questions');
             const questionsDiv = document.getElementById('questions');
+            if (!questionsDiv) {
+                console.error('Questions div not found');
+                return;
+            }
             const questions = [
-                {"id": 1, "text": "Which of the following is the correct answer for question 7 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 2, "text": "According to the provided text, what is the correct answer for question 8 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 3, "text": "In the first set, what is the designated correct answer for question 9?", "options": ["A", "B", "C", "D"]},
-                {"id": 4, "text": "What answer corresponds to question 10 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 5, "text": "For question 11 in the first set, which option is identified as the correct answer?", "options": ["A", "B", "C", "D"]},
-                {"id": 6, "text": "What is the correct answer indicated for question 12 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 7, "text": "According to the data, which answer is correct for question 13 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 8, "text": "Question 14 in the first set has which of the following as the correct answer?", "options": ["A", "B", "C", "D"]},
-                {"id": 9, "text": "What is the correct choice for question 15 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 10, "text": "Which letter represents the correct answer for question 16 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 11, "text": "What answer is deemed correct for question 17 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 12, "text": "As per the provided information, the answer to question 18 in the first set is:", "options": ["A", "B", "C", "D"]},
-                {"id": 13, "text": "Which is the right answer for question 19 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 14, "text": "What is the correct answer for question 20 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 15, "text": "What letter choice correctly answers question 21 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 16, "text": "Question 22 in the first set is best answered by:", "options": ["A", "B", "C", "D"]},
-                {"id": 17, "text": "Question 23 in the first set has which option as the correct answer?", "options": ["A", "B", "C", "D"]},
-                {"id": 18, "text": "Which option is the right answer for question 24 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 19, "text": "What is the correct answer to question 25 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 20, "text": "Which of the provided options is the correct answer for question 26 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 21, "text": "What answer choice accurately reflects the correct answer for question 27 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 22, "text": "In the first set, what is the designated correct answer for question 28?", "options": ["A", "B", "C", "D"]},
-                {"id": 23, "text": "For question 29 in the first set, which option is identified as the correct answer?", "options": ["A", "B", "C", "D"]},
-                {"id": 24, "text": "What is the correct answer indicated for question 30 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 25, "text": "According to the data, which answer is correct for question 31 in the first set?", "options": ["A", "B", "C", "D"]},
-                {"id": 26, "text": "Which of the following is the correct answer for question 7 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 27, "text": "According to the provided text, what is the correct answer for question 8 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 28, "text": "In the second set, what is the designated correct answer for question 9?", "options": ["A", "B", "C", "D"]},
-                {"id": 29, "text": "What answer corresponds to question 10 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 30, "text": "For question 11 in the second set, which option is identified as the correct answer?", "options": ["A", "B", "C", "D"]},
-                {"id": 31, "text": "What is the correct answer indicated for question 12 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 32, "text": "According to the data, which answer is correct for question 13 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 33, "text": "Question 14 in the second set has which of the following as the correct answer?", "options": ["A", "B", "C", "D"]},
-                {"id": 34, "text": "What is the correct choice for question 15 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 35, "text": "Which letter represents the correct answer for question 16 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 36, "text": "What answer is deemed correct for question 17 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 37, "text": "As per the provided information, the answer to question 18 in the second set is:", "options": ["A", "B", "C", "D"]},
-                {"id": 38, "text": "Which is the right answer for question 19 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 39, "text": "What is the correct answer for question 20 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 40, "text": "What letter choice correctly answers question 21 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 41, "text": "Question 22 in the second set is best answered by:", "options": ["A", "B", "C", "D"]},
-                {"id": 42, "text": "Question 23 in the second set has which option as the correct answer?", "options": ["A", "B", "C", "D"]},
-                {"id": 43, "text": "Which option is the right answer for question 24 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 44, "text": "What is the correct answer to question 25 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 45, "text": "Which of the provided options is the correct answer for question 26 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 46, "text": "What answer choice accurately reflects the correct answer for question 27 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 47, "text": "In the second set, what is the designated correct answer for question 28?", "options": ["A", "B", "C", "D"]},
-                {"id": 48, "text": "For question 29 in the second set, which option is identified as the correct answer?", "options": ["A", "B", "C", "D"]},
-                {"id": 49, "text": "What is the correct answer indicated for question 30 in the second set?", "options": ["A", "B", "C", "D"]},
-                {"id": 50, "text": "According to the data, which answer is correct for question 31 in the second set?", "options": ["A", "B", "C", "D"]}
+                {"id": 1, "text": "Nghe đoạn hội thoại, người nói đang thảo luận về điều gì?", "options": ["A. Kế hoạch du lịch", "B. Dự án công việc", "C. Mua sắm", "D. Học tập"]},
+                {"id": 2, "text": "Người phụ nữ đề nghị gì trong đoạn hội thoại?", "options": ["A. Hủy cuộc họp", "B. Đặt lịch hẹn", "C. Mua vé máy bay", "D. Đổi giờ làm"]},
+                {"id": 3, "text": "Đoạn hội thoại diễn ra ở đâu?", "options": ["A. Nhà hàng", "B. Văn phòng", "C. Sân bay", "D. Trường học"]},
+                {"id": 4, "text": "Người đàn ông đang phàn nàn về điều gì?", "options": ["A. Thời tiết", "B. Dịch vụ khách hàng", "C. Thiết bị hỏng", "D. Giao thông"]},
+                {"id": 5, "text": "Trong đoạn thông báo, sự kiện được tổ chức khi nào?", "options": ["A. Thứ Hai", "B. Thứ Tư", "C. Thứ Sáu", "D. Chủ Nhật"]},
+                {"id": 6, "text": "Người nói đề cập đến sản phẩm nào?", "options": ["A. Máy tính", "B. Điện thoại", "C. Máy in", "D. Tivi"]},
+                {"id": 7, "text": "Người phụ nữ yêu cầu gì từ đồng nghiệp?", "options": ["A. Gửi email", "B. Gọi điện", "C. Kiểm tra báo cáo", "D. Đặt phòng họp"]},
+                {"id": 8, "text": "Đoạn hội thoại đề cập đến vấn đề gì?", "options": ["A. Trễ chuyến bay", "B. Hủy đơn hàng", "C. Sai địa chỉ", "D. Hết hàng"]},
+                {"id": 9, "text": "Người nói đang mô tả ai?", "options": ["A. Nhân viên mới", "B. Khách hàng", "C. Quản lý", "D. Kỹ thuật viên"]},
+                {"id": 10, "text": "Sự kiện trong thông báo diễn ra ở đâu?", "options": ["A. Hội trường", "B. Phòng họp", "C. Công viên", "D. Nhà hàng"]},
+                {"id": 11, "text": "Người đàn ông đang hỏi về điều gì?", "options": ["A. Giá sản phẩm", "B. Lịch giao hàng", "C. Chính sách bảo hành", "D. Quy trình tuyển dụng"]},
+                {"id": 12, "text": "Người phụ nữ trả lời thế nào về yêu cầu?", "options": ["A. Đồng ý ngay", "B. Cần kiểm tra", "C. Từ chối", "D. Yêu cầu thêm thông tin"]},
+                {"id": 13, "text": "Đoạn hội thoại liên quan đến ngành nào?", "options": ["A. Công nghệ", "B. Y tế", "C. Giáo dục", "D. Du lịch"]},
+                {"id": 14, "text": "Người nói đề xuất gì để giải quyết vấn đề?", "options": ["A. Hoàn tiền", "B. Gửi lại hàng", "C. Sửa chữa", "D. Liên hệ quản lý"]},
+                {"id": 15, "text": "Thông báo yêu cầu nhân viên làm gì?", "options": ["A. Nộp báo cáo", "B. Tham gia khóa học", "C. Kiểm tra thiết bị", "D. Gặp khách hàng"]},
+                {"id": 16, "text": "Người phụ nữ đang nói về điều gì?", "options": ["A. Kế hoạch nghỉ lễ", "B. Dự án mới", "C. Thay đổi lịch", "D. Đánh giá nhân viên"]},
+                {"id": 17, "text": "Đoạn hội thoại xảy ra vào thời điểm nào?", "options": ["A. Buổi sáng", "B. Buổi trưa", "C. Buổi tối", "D. Không rõ"]},
+                {"id": 18, "text": "Người đàn ông muốn thay đổi gì?", "options": ["A. Địa điểm họp", "B. Thời gian giao hàng", "C. Sản phẩm đặt mua", "D. Thông tin liên lạc"]},
+                {"id": 19, "text": "Thông báo đề cập đến thay đổi gì?", "options": ["A. Quy định công ty", "B. Lịch làm việc", "C. Chính sách giá", "D. Quy trình sản xuất"]},
+                {"id": 20, "text": "Người nói đang giới thiệu gì?", "options": ["A. Sản phẩm mới", "B. Dịch vụ cũ", "C. Nhân viên mới", "D. Chi nhánh mới"]},
+                {"id": 21, "text": "Người phụ nữ hỏi về điều gì?", "options": ["A. Thời gian giao hàng", "B. Giá cả", "C. Tính năng sản phẩm", "D. Chính sách trả hàng"]},
+                {"id": 22, "text": "Đoạn hội thoại đề cập đến sự kiện gì?", "options": ["A. Khai trương", "B. Hội thảo", "C. Kiểm tra định kỳ", "D. Nghỉ lễ"]},
+                {"id": 23, "text": "Người đàn ông phản hồi thế nào?", "options": ["A. Không đồng ý", "B. Đồng ý", "C. Yêu cầu thêm thời gian", "D. Không trả lời"]},
+                {"id": 24, "text": "Thông báo nhắc nhở về điều gì?", "options": ["A. Nộp hồ sơ", "B. Tham gia họp", "C. Kiểm tra an toàn", "D. Thanh toán hóa đơn"]},
+                {"id": 25, "text": "Người nói đang thảo luận về vấn đề gì?", "options": ["A. Chất lượng sản phẩm", "B. Dịch vụ khách hàng", "C. Tiến độ dự án", "D. Chi phí vận hành"]},
+                {"id": 26, "text": "Người phụ nữ đề nghị gì trong cuộc họp?", "options": ["A. Tăng ngân sách", "B. Thay đổi kế hoạch", "C. Thuê thêm nhân sự", "D. Đánh giá lại"]},
+                {"id": 27, "text": "Đoạn hội thoại diễn ra ở đâu?", "options": ["A. Nhà máy", "B. Văn phòng", "C. Cửa hàng", "D. Hội chợ"]},
+                {"id": 28, "text": "Người đàn ông phàn nàn về điều gì?", "options": ["A. Chất lượng dịch vụ", "B. Giá cả", "C. Thời gian chờ", "D. Thông tin sai lệch"]},
+                {"id": 29, "text": "Thông báo đề cập đến ai?", "options": ["A. Nhân viên", "B. Khách hàng", "C. Đối tác", "D. Nhà cung cấp"]},
+                {"id": 30, "text": "Người nói yêu cầu gì?", "options": ["A. Gửi báo cáo", "B. Ký hợp đồng", "C. Gặp trực tiếp", "D. Hủy đơn hàng"]},
+                {"id": 31, "text": "Người phụ nữ đang hỏi về điều gì?", "options": ["A. Lịch trình", "B. Kế hoạch", "C. Chi phí", "D. Kết quả"]},
+                {"id": 32, "text": "Đoạn hội thoại liên quan đến gì?", "options": ["A. Đào tạo", "B. Bán hàng", "C. Sản xuất", "D. Marketing"]},
+                {"id": 33, "text": "Người đàn ông đề xuất gì?", "options": ["A. Tăng ca", "B. Giảm giá", "C. Thay đổi thiết kế", "D. Thuê thêm người"]},
+                {"id": 34, "text": "Thông báo yêu cầu làm gì?", "options": ["A. Tham gia khảo sát", "B. Kiểm tra hệ thống", "C. Nộp báo cáo", "D. Liên hệ khách hàng"]},
+                {"id": 35, "text": "Người nói đang mô tả gì?", "options": ["A. Quy trình mới", "B. Sản phẩm cũ", "C. Dự án thất bại", "D. Kế hoạch tương lai"]},
+                {"id": 36, "text": "Người phụ nữ phản hồi thế nào?", "options": ["A. Đồng ý", "B. Từ chối", "C. Yêu cầu thêm thông tin", "D. Không trả lời"]},
+                {"id": 37, "text": "Đoạn hội thoại xảy ra khi nào?", "options": ["A. Trước cuộc họp", "B. Sau giờ làm", "C. Trong giờ nghỉ", "D. Không rõ"]},
+                {"id": 38, "text": "Người đàn ông muốn gì?", "options": ["A. Hoàn tiền", "B. Thay đổi đơn hàng", "C. Kiểm tra sản phẩm", "D. Gặp quản lý"]},
+                {"id": 39, "text": "Thông báo nhắc nhở gì?", "options": ["A. Đăng ký sự kiện", "B. Kiểm tra an toàn", "C. Thanh toán hóa đơn", "D. Nộp hồ sơ"]},
+                {"id": 40, "text": "Người nói giới thiệu gì?", "options": ["A. Dịch vụ mới", "B. Sản phẩm cũ", "C. Nhân viên mới", "D. Chi nhánh mới"]},
+                {"id": 41, "text": "Người phụ nữ hỏi gì?", "options": ["A. Giá cả", "B. Thời gian giao", "C. Tính năng", "D. Bảo hành"]},
+                {"id": 42, "text": "Đoạn hội thoại đề cập đến gì?", "options": ["A. Khai trương", "B. Hội thảo", "C. Kiểm tra", "D. Nghỉ lễ"]},
+                {"id": 43, "text": "Người đàn ông phản hồi ra sao?", "options": ["A. Đồng ý", "B. Không đồng ý", "C. Yêu cầu thêm thời gian", "D. Không trả lời"]},
+                {"id": 44, "text": "Thông báo nhắc nhở gì?", "options": ["A. Tham gia họp", "B. Nộp báo cáo", "C. Kiểm tra thiết bị", "D. Thanh toán"]},
+                {"id": 45, "text": "Người nói thảo luận gì?", "options": ["A. Chất lượng", "B. Dịch vụ", "C. Tiến độ", "D. Chi phí"]},
+                {"id": 46, "text": "Người phụ nữ đề nghị gì?", "options": ["A. Tăng ngân sách", "B. Thay đổi kế hoạch", "C. Thuê thêm người", "D. Đánh giá lại"]},
+                {"id": 47, "text": "Đoạn hội thoại diễn ra ở đâu?", "options": ["A. Văn phòng", "B. Nhà máy", "C. Cửa hàng", "D. Hội chợ"]},
+                {"id": 48, "text": "Người đàn ông phàn nàn gì?", "options": ["A. Dịch vụ", "B. Giá cả", "C. Thời gian chờ", "D. Thông tin sai"]},
+                {"id": 49, "text": "Thông báo đề cập đến ai?", "options": ["A. Nhân viên", "B. Khách hàng", "C. Đối tác", "D. Nhà cung cấp"]},
+                {"id": 50, "text": "Người nói yêu cầu gì?", "options": ["A. Gửi báo cáo", "B. Ký hợp đồng", "C. Gặp trực tiếp", "D. Hủy đơn hàng"]}
             ];
 
             questions.forEach(q => {
                 const div = document.createElement('div');
                 div.className = 'question';
                 div.innerHTML = `
-                    <p><strong>Question ${q.id}:</strong> ${q.text}</p>
+                    <p><strong>Câu ${q.id}:</strong> ${q.text}</p>
                     ${q.options.map((opt, i) => `
                         <div class="option">
                             <input type="radio" name="q${q.id}" value="${opt}" id="q${q.id}-${opt}">
@@ -187,49 +234,71 @@
                 `;
                 questionsDiv.appendChild(div);
             });
+            console.log('Questions loaded');
         }
 
         function startQuiz() {
             if (isAdmin) {
+                console.log('Admin starting quiz');
                 ws.send(JSON.stringify({ type: 'start' }));
             }
         }
 
         function endQuiz() {
             if (isAdmin) {
+                console.log('Admin ending quiz');
                 ws.send(JSON.stringify({ type: 'end' }));
             }
         }
 
         document.getElementById('quiz-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log('Submitting quiz');
             const formData = new FormData(e.target);
             const answers = {};
             formData.forEach((value, key) => {
                 answers[key] = value;
             });
 
-            const response = await fetch('/submit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, answers })
-            });
-            const result = await response.json();
-            alert(`Your score: ${result.score}/50`);
-            document.getElementById('quiz').classList.add('hidden');
+            try {
+                const response = await fetch('/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, answers })
+                });
+                const result = await response.json();
+                if (result.error) {
+                    console.error('Submit error:', result.error);
+                    alert('Lỗi khi nộp bài: ' + result.error);
+                } else {
+                    console.log('Score received:', result.score);
+                    alert(`Điểm của bạn: ${result.score}/50`);
+                    document.getElementById('quiz').classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('Submit fetch error:', error);
+                alert('Lỗi khi nộp bài, vui lòng thử lại');
+            }
         });
 
         async function fetchResults() {
-            const response = await fetch('/results');
-            const results = await response.json();
-            const tbody = document.getElementById('results-table').querySelector('tbody');
-            tbody.innerHTML = '';
-            results.forEach(r => {
-                const row = document.createElement('tr');
-                row.innerHTML = `<td>${r.username}</td><td>${r.score}</td>`;
-                tbody.appendChild(row);
-            });
-            document.getElementById('results').classList.remove('hidden');
+            console.log('Fetching results');
+            try {
+                const response = await fetch('/results');
+                const results = await response.json();
+                const tbody = document.getElementById('results-table').querySelector('tbody');
+                tbody.innerHTML = '';
+                results.forEach(r => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td>${r.username}</td><td>${r.score}</td>`;
+                    tbody.appendChild(row);
+                });
+                document.getElementById('results').classList.remove('hidden');
+                console.log('Results loaded');
+            } catch (error) {
+                console.error('Fetch results error:', error);
+                alert('Lỗi khi tải kết quả');
+            }
         }
     </script>
 </body>
