@@ -4,38 +4,50 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TOEIC Part 2 Quiz</title>
-  <style>
-    body { font-family: sans-serif; margin: 20px; }
-    .hidden { display: none; }
-    .question { margin-bottom: 15px; }
-    .section-title { font-size: 18px; margin-top: 30px; margin-bottom: 10px; font-weight: bold; }
-    #notification { color: green; margin-top: 15px; }
-  </style>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-  <audio id="audio" controls style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
+<body class="bg-gray-100 min-h-screen p-6">
+  <audio id="audio" controls class="fixed top-4 right-4 z-50">
     <source src="audio.mp3" type="audio/mpeg">
     Your browser does not support the audio element.
   </audio>
 
-  <h1>TOEIC Part 2 Quiz</h1>
+  <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6">
+    <h1 class="text-3xl font-bold text-center mb-6">TOEIC Part 2 Quiz</h1>
 
-  <div id="admin-controls">
-    <button id="startBtn">Bắt đầu làm bài</button>
-    <button id="endBtn" class="hidden">Kết thúc</button>
+    <div id="admin-controls" class="mb-6 hidden">
+      <div id="participant-count" class="text-lg font-semibold mb-4"></div>
+      <button id="startBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Bắt đầu làm bài</button>
+      <button id="endBtn" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 hidden">Kết thúc</button>
+      <div id="results-table" class="mt-6 hidden">
+        <h2 class="text-xl font-bold mb-4">Kết quả</h2>
+        <table class="w-full border-collapse">
+          <thead>
+            <tr class="bg-gray-200">
+              <th class="border p-2">Tên</th>
+              <th class="border p-2">Điểm</th>
+              <th class="border p-2">Thời gian nộp</th>
+            </tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <form id="quizForm" class="hidden">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold">Phần 1</h2>
+        <div id="section1" class="space-y-4"></div>
+      </div>
+      <div class="mb-6">
+        <h2 class="text-xl font-bold">Phần 2</h2>
+        <div id="section2" class="space-y-4"></div>
+      </div>
+      <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Nộp bài</button>
+    </form>
+
+    <div id="notification" class="mt-4 text-lg"></div>
   </div>
-
-  <form id="quizForm" class="hidden">
-    <div class="section-title">Phần 1</div>
-    <div id="section1"></div>
-
-    <div class="section-title">Phần 2</div>
-    <div id="section2"></div>
-
-    <button type="submit">Nộp bài</button>
-  </form>
-
-  <div id="notification"></div>
 
   <script>
     const username = prompt("Nhập tên của bạn:") || 'Học sinh';
@@ -46,19 +58,25 @@
     const notification = document.getElementById("notification");
     const section1 = document.getElementById("section1");
     const section2 = document.getElementById("section2");
+    const adminControls = document.getElementById("admin-controls");
+    const participantCount = document.getElementById("participant-count");
+    const resultsTable = document.getElementById("results-table");
+    const resultsBody = document.getElementById("results-body");
 
     const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
     const socket = new WebSocket(wsProtocol + location.host);
 
     const createQuestion = (id, text) => {
       const div = document.createElement("div");
-      div.className = "question";
+      div.className = "bg-gray-50 p-4 rounded border";
       div.innerHTML = `
-        <label><strong>${text}</strong></label><br>
-        <label><input type="radio" name="${id}" value="A"> A</label><br>
-        <label><input type="radio" name="${id}" value="B"> B</label><br>
-        <label><input type="radio" name="${id}" value="C"> C</label><br>
-        <label><input type="radio" name="${id}" value="D"> D</label>
+        <label class="font-semibold">${text}</label>
+        <div class="mt-2 space-y-2">
+          <label class="block"><input type="radio" name="${id}" value="A" class="mr-2"> A</label>
+          <label class="block"><input type="radio" name="${id}" value="B" class="mr-2"> B</label>
+          <label class="block"><input type="radio" name="${id}" value="C" class="mr-2"> C</label>
+          <label class="block"><input type="radio" name="${id}" value="D" class="mr-2"> D</label>
+        </div>
       `;
       return div;
     };
@@ -69,7 +87,7 @@
     }
 
     if (isAdmin) {
-      startBtn.classList.remove("hidden");
+      adminControls.classList.remove("hidden");
       startBtn.onclick = () => {
         socket.send(JSON.stringify({ type: "start" }));
         startBtn.classList.add("hidden");
@@ -78,25 +96,50 @@
       endBtn.onclick = () => {
         socket.send(JSON.stringify({ type: "end" }));
         endBtn.disabled = true;
+        fetchResults();
       };
     } else {
       quizForm.classList.add("hidden");
     }
 
-    socket.onmessage = (event) => {
+    socket.onmessage = async (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === "start") {
         if (!isAdmin) quizForm.classList.remove("hidden");
       }
       if (msg.type === "end") {
-        quizForm.querySelectorAll('input').forEach(input => input.disabled = true);  // Disable form when quiz ends
+        quizForm.querySelectorAll('input').forEach(input => input.disabled = true);
         notification.innerText = 'Quiz đã kết thúc. Bạn không thể thay đổi câu trả lời nữa.';
+        if (isAdmin) {
+          resultsTable.classList.remove("hidden");
+          fetchResults();
+        }
       }
       if (msg.type === "submitted") {
         const who = msg.username === username ? "Bạn" : msg.username;
         notification.innerText = `${who} đã nộp bài.`;
       }
+      if (msg.type === "participantCount") {
+        if (isAdmin) {
+          participantCount.innerText = `Số người tham gia: ${msg.count}`;
+        }
+      }
     };
+
+    async function fetchResults() {
+      const res = await fetch("/results");
+      const results = await res.json();
+      resultsBody.innerHTML = "";
+      results.forEach(result => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="border p-2">${result.username}</td>
+          <td class="border p-2">${result.score}/50</td>
+          <td class="border p-2">${new Date(result.timestamp).toLocaleString()}</td>
+        `;
+        resultsBody.appendChild(tr);
+      });
+    }
 
     quizForm.onsubmit = async (e) => {
       e.preventDefault();

@@ -11,7 +11,7 @@ const clients = new Set();
 let quizStarted = false;
 
 const answerKey = {
-  // (Danh sách câu hỏi và đáp án tương tự như trước)
+  // Add your answer key here
 };
 
 app.use(express.static("public"));
@@ -20,6 +20,9 @@ app.use(bodyParser.json());
 wss.on("connection", (ws) => {
   clients.add(ws);
   console.log("Client connected");
+  
+  // Send participant count to admin
+  broadcastParticipantCount();
 
   ws.on("message", (message) => {
     const data = JSON.parse(message);
@@ -39,11 +42,13 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     clients.delete(ws);
+    broadcastParticipantCount();
   });
 
   ws.on("error", (error) => {
     console.error("WebSocket Error: ", error);
-    clients.delete(ws); // Remove the client in case of an error
+    clients.delete(ws);
+    broadcastParticipantCount();
   });
 });
 
@@ -54,6 +59,10 @@ function broadcast(data) {
       client.send(message);
     }
   });
+}
+
+function broadcastParticipantCount() {
+  broadcast({ type: "participantCount", count: clients.size });
 }
 
 app.post("/submit", (req, res) => {
@@ -74,11 +83,10 @@ app.post("/submit", (req, res) => {
     results = JSON.parse(fs.readFileSync("results.json"));
   }
 
-  // Check if username already exists to avoid duplicate entries
   const existingUser = results.find(r => r.username === username);
   if (existingUser) {
     existingUser.score = score;
-    existingUser.timestamp = result.timestamp;  // Update the timestamp
+    existingUser.timestamp = result.timestamp;
   } else {
     results.push(result);
   }
