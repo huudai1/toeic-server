@@ -1,98 +1,101 @@
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const fs = require('fs').promises;
-const path = require('path');
-
+const express = require("express");
 const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const http = require("http").createServer(app);
+const WebSocket = require("ws");
+const fs = require("fs");
+const path = require("path");
+const bodyParser = require("body-parser");
 
-// Phục vụ file tĩnh từ thư mục 'public'
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
+const wss = new WebSocket.Server({ server: http });
+const clients = new Set();
 
-// Đáp án bài kiểm tra
+let quizStarted = false;
+
 const answerKey = {
-    q1: 'B', q2: 'B', q3: 'C', q4: 'B', q5: 'B', q6: 'B', q7: 'C', q8: 'A', q9: 'A', q10: 'C',
-    q11: 'B', q12: 'C', q13: 'A', q14: 'C', q15: 'B', q16: 'B', q17: 'B', q18: 'B', q19: 'C', q20: 'A',
-    q21: 'C', q22: 'C', q23: 'B', q24: 'A', q25: 'C', q26: 'B', q27: 'A', q28: 'C', q29: 'A', q30: 'B',
-    q31: 'B', q32: 'A', q33: 'C', q34: 'B', q35: 'A', q36: 'B', q37: 'A', q38: 'A', q39: 'B', q40: 'C',
-    q41: 'A', q42: 'C', q43: 'A', q44: 'A', q45: 'C', q46: 'A', q47: 'B', q48: 'A', q49: 'B', q50: 'A'
+  // Bộ 1 (q7 - q31)
+  q7: "B", q8: "B", q9: "C", q10: "B", q11: "B",
+  q12: "B", q13: "C", q14: "A", q15: "A", q16: "C",
+  q17: "A", q18: "B", q19: "A", q20: "C", q21: "B",
+  q22: "C", q23: "A", q24: "C", q25: "B", q26: "C",
+  q27: "A", q28: "C", q29: "C", q30: "B", q31: "B",
+  // Bộ 2 (q7_2 - q31_2)
+  q7_2: "B", q8_2: "A", q9_2: "C", q10_2: "A", q11_2: "B",
+  q12_2: "B", q13_2: "A", q14_2: "C", q15_2: "B", q16_2: "A",
+  q17_2: "B", q18_2: "A", q19_2: "A", q20_2: "B", q21_2: "C",
+  q22_2: "A", q23_2: "C", q24_2: "A", q25_2: "A", q26_2: "C",
+  q27_2: "A", q28_2: "B", q29_2: "A", q30_2: "B", q31_2: "A",
 };
 
-// Xử lý WebSocket cho admin bắt đầu/kết thúc
-wss.on('connection', (ws) => {
-    console.log('WebSocket client connected');
-    ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
-            console.log('WebSocket received:', data);
-            if (data.type === 'start' || data.type === 'end') {
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify(data));
-                    }
-                });
-            }
-        } catch (error) {
-            console.error('WebSocket message error:', error);
-        }
-    });
-    ws.on('error', (error) => console.error('WebSocket error:', error));
-});
+app.use(express.static("public"));
+app.use(bodyParser.json());
 
-// Endpoint nộp bài
-app.post('/submit', async (req, res) => {
-    try {
-        const { username, answers } = req.body;
-        if (!username || !answers) {
-            return res.status(400).json({ error: 'Missing username or answers' });
-        }
+wss.on("connection", (ws) => {
+  clients.add(ws);
+  console.log("Client connected");
 
-        let score = 0;
-        for (let i = 1; i <= 50; i++) {
-            if (answers[`q${i}`] === answerKey[`q${i}`]) {
-                score++;
-            }
-        }
+  ws.on("message", (message) => {
+    const data = JSON.parse(message);
 
-        let results = [];
-        try {
-            results = JSON.parse(await fs.readFile('results.json', 'utf8') || '[]');
-        } catch (error) {
-            console.error('Error reading results.json, initializing empty:', error);
-        }
-
-        results.push({ username, score });
-        await fs.writeFile('results.json', JSON.stringify(results, null, 2));
-        console.log(`Submitted: ${username}, score: ${score}`);
-
-        res.json({ score });
-    } catch (error) {
-        console.error('Submit error:', error);
-        res.status(500).json({ error: 'Server error' });
+    if (data.type === "start") {
+      quizStarted = true;
+      broadcast({ type: "start" });
     }
-});
-
-// Endpoint lấy kết quả
-app.get('/results', async (req, res) => {
-    try {
-        let results = [];
-        try {
-            results = JSON.parse(await fs.readFile('results.json', 'utf8') || '[]');
-        } catch (error) {
-            console.error('Error reading results.json:', error);
-        }
-        res.json(results);
-    } catch (error) {
-        console.error('Results error:', error);
-        res.status(500).json({ error: 'Server error' });
+    if (data.type === "end") {
+      quizStarted = false;
+      broadcast({ type: "end" });
     }
+    if (data.type === "submitted") {
+      broadcast({ type: "submitted", username: data.username });
+    }
+  });
+
+  ws.on("close", () => {
+    clients.delete(ws);
+  });
 });
 
-// Dùng port động cho Render
-const port = process.env.PORT || 3000;
-server.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+function broadcast(data) {
+  const message = JSON.stringify(data);
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  }
+}
+
+app.post("/submit", (req, res) => {
+  const { username, answers } = req.body;
+  let score = 0;
+  let total = Object.keys(answerKey).length;
+
+  for (const key in answerKey) {
+    if (answers[key] && answers[key] === answerKey[key]) {
+      score++;
+    }
+  }
+
+  const result = { username, score, total, timestamp: new Date().toISOString() };
+
+  let results = [];
+  if (fs.existsSync("results.json")) {
+    results = JSON.parse(fs.readFileSync("results.json"));
+  }
+  results.push(result);
+  fs.writeFileSync("results.json", JSON.stringify(results, null, 2));
+
+  res.json({ score, total });
+});
+
+app.get("/results", (req, res) => {
+  if (fs.existsSync("results.json")) {
+    const results = JSON.parse(fs.readFileSync("results.json"));
+    res.json(results);
+  } else {
+    res.json([]);
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
 });
