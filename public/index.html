@@ -15,6 +15,26 @@
   <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6">
     <h1 class="text-3xl font-bold text-center mb-6">TOEIC Part 2 Quiz</h1>
 
+    <!-- Form nhập tên -->
+    <div id="login-form" class="mb-6">
+      <h2 class="text-xl font-bold mb-4">Nhập tên của bạn</h2>
+      <form id="name-form">
+        <input
+          type="text"
+          id="username"
+          class="w-full p-2 border rounded mb-4"
+          placeholder="Nhập tên của bạn"
+          required
+        />
+        <button
+          type="submit"
+          class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+        >
+          Xác nhận
+        </button>
+      </form>
+    </div>
+
     <div id="admin-controls" class="mb-6 hidden">
       <div id="participant-count" class="text-lg font-semibold mb-4"></div>
       <button id="startBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Bắt đầu làm bài</button>
@@ -52,8 +72,10 @@
   </div>
 
   <script>
-    const username = prompt("Nhập tên của bạn:") || 'Học sinh';
-    const isAdmin = username.toLowerCase() === 'admin';
+    let username = null;
+    let isAdmin = false;
+    const nameForm = document.getElementById("name-form");
+    const loginForm = document.getElementById("login-form");
     const startBtn = document.getElementById("startBtn");
     const endBtn = document.getElementById("endBtn");
     const quizForm = document.getElementById("quizForm");
@@ -66,7 +88,7 @@
     const resultsBody = document.getElementById("results-body");
 
     const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const socket = new WebSocket(wsProtocol + location.host);
+    let socket;
 
     const createQuestion = (id, text, section) => {
       const div = document.createElement("div");
@@ -88,43 +110,56 @@
       section2.appendChild(createQuestion(`q${i}_2`, `Câu ${i}`, 2));
     }
 
-    if (isAdmin) {
-      adminControls.classList.remove("hidden");
-      startBtn.onclick = () => {
-        socket.send(JSON.stringify({ type: "start" }));
-        startBtn.classList.add("hidden");
-        endBtn.classList.remove("hidden");
-      };
-      endBtn.onclick = () => {
-        socket.send(JSON.stringify({ type: "end" }));
-        endBtn.disabled = true;
-        fetchResults();
-      };
-    } else {
-      quizForm.classList.add("hidden");
-    }
+    nameForm.onsubmit = (e) => {
+      e.preventDefault();
+      username = document.getElementById("username").value.trim();
+      if (!username) {
+        notification.innerText = "Vui lòng nhập tên!";
+        return;
+      }
+      isAdmin = username.toLowerCase() === "admin";
+      loginForm.classList.add("hidden");
+      notification.innerText = "";
 
-    socket.onmessage = async (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.type === "start") {
-        if (!isAdmin) quizForm.classList.remove("hidden");
-      }
-      if (msg.type === "end") {
-        quizForm.querySelectorAll('input').forEach(input => input.disabled = true);
-        notification.innerText = 'Quiz đã kết thúc. Bạn không thể thay đổi câu trả lời nữa.';
-        if (isAdmin) {
-          resultsTable.classList.remove("hidden");
+      // Kết nối WebSocket sau khi nhập tên
+      socket = new WebSocket(wsProtocol + location.host);
+
+      socket.onmessage = async (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "start") {
+          if (!isAdmin) quizForm.classList.remove("hidden");
+        }
+        if (msg.type === "end") {
+          quizForm.querySelectorAll('input').forEach(input => input.disabled = true);
+          notification.innerText = 'Quiz đã kết thúc. Bạn không thể thay đổi câu trả lời nữa.';
+          if (isAdmin) {
+            resultsTable.classList.remove("hidden");
+            fetchResults();
+          }
+        }
+        if (msg.type === "submitted") {
+          const who = msg.username === username ? "Bạn" : msg.username;
+          notification.innerText = `${who} đã nộp bài.`;
+        }
+        if (msg.type === "participantCount") {
+          if (isAdmin) {
+            participantCount.innerText = `Số người tham gia: ${msg.count}`;
+          }
+        }
+      };
+
+      if (isAdmin) {
+        adminControls.classList.remove("hidden");
+        startBtn.onclick = () => {
+          socket.send(JSON.stringify({ type: "start" }));
+          startBtn.classList.add("hidden");
+          endBtn.classList.remove("hidden");
+        };
+        endBtn.onclick = () => {
+          socket.send(JSON.stringify({ type: "end" }));
+          endBtn.disabled = true;
           fetchResults();
-        }
-      }
-      if (msg.type === "submitted") {
-        const who = msg.username === username ? "Bạn" : msg.username;
-        notification.innerText = `${who} đã nộp bài.`;
-      }
-      if (msg.type === "participantCount") {
-        if (isAdmin) {
-          participantCount.innerText = `Số người tham gia: ${msg.count}`;
-        }
+        };
       }
     };
 
