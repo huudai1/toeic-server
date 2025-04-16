@@ -11,7 +11,18 @@ const clients = new Set();
 let quizStarted = false;
 
 const answerKey = {
-  // Add your answer key here
+  // Bộ 1 (q7 - q31)
+  q7: "B", q8: "B", q9: "C", q10: "B", q11: "B",
+  q12: "B", q13: "C", q14: "A", q15: "A", q16: "C",
+  q17: "A", q18: "B", q19: "A", q20: "C", q21: "B",
+  q22: "C", q23: "A", q24: "C", q25: "B", q26: "C",
+  q27: "A", q28: "C", q29: "C", q30: "B", q31: "B",
+  // Bộ 2 (q7_2 - q31_2)
+  q7_2: "B", q8_2: "A", q9_2: "C", q10_2: "A", q11_2: "B",
+  q12_2: "B", q13_2: "A", q14_2: "C", q15_2: "B", q16_2: "A",
+  q17_2: "B", q18_2: "A", q19_2: "A", q20_2: "B", q21_2: "C",
+  q22_2: "A", q23_2: "C", q24_2: "A", q25_2: "A", q26_2: "C",
+  q27_2: "A", q28_2: "B", q29_2: "A", q30_2: "B", q31_2: "A",
 };
 
 app.use(express.static("public"));
