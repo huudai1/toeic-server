@@ -88,6 +88,10 @@
       if (msg.type === "start") {
         if (!isAdmin) quizForm.classList.remove("hidden");
       }
+      if (msg.type === "end") {
+        quizForm.querySelectorAll('input').forEach(input => input.disabled = true);  // Disable form when quiz ends
+        notification.innerText = 'Quiz đã kết thúc. Bạn không thể thay đổi câu trả lời nữa.';
+      }
       if (msg.type === "submitted") {
         const who = msg.username === username ? "Bạn" : msg.username;
         notification.innerText = `${who} đã nộp bài.`;
