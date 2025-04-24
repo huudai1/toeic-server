@@ -2,42 +2,145 @@ const express = require("express");
 const app = express();
 const http = require("http").createServer(app);
 const WebSocket = require("ws");
-const fs = require("fs");
+const fs = require("fs").promises;
 const path = require("path");
-const bodyParser = require("body-parser");
+const multer = require("multer");
 
 const wss = new WebSocket.Server({ server: http });
 const clients = new Set();
 let quizStarted = false;
+let submittedCount = 0;
 
-const answerKey = {
-  // Bộ 1 (q7 - q31)
-  q7: "B", q8: "B", q9: "C", q10: "B", q11: "B",
-  q12: "B", q13: "C", q14: "A", q15: "A", q16: "C",
-  q17: "A", q18: "B", q19: "A", q20: "C", q21: "B",
-  q22: "C", q23: "A", q24: "C", q25: "B", q26: "C",
-  q27: "A", q28: "C", q29: "C", q30: "B", q31: "B",
-  // Bộ 2 (q7_2 - q31_2)
-  q7_2: "B", q8_2: "A", q9_2: "C", q10_2: "A", q11_2: "B",
-  q12_2: "B", q13_2: "A", q14_2: "C", q15_2: "B", q16_2: "A",
-  q17_2: "B", q18_2: "A", q19_2: "A", q20_2: "B", q21_2: "C",
-  q22_2: "A", q23_2: "C", q24_2: "A", q25_2: "A", q26_2: "C",
-  q27_2: "A", q28_2: "B", q29_2: "A", q30_2: "B", q31_2: "A",
+// In-memory storage
+let quizData = {
+  audioUrl: "",
+  images: {},
+  answerKey: {},
 };
+let results = [];
 
+// Multer for file uploads
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const dir = file.mimetype.startsWith("audio/")
+      ? "public/uploads/audio"
+      : "public/uploads/images";
+    await fs.mkdir(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+const upload = multer({ storage });
+
+// Middleware
 app.use(express.static("public"));
-app.use(bodyParser.json());
+app.use(express.json());
 
+// Routes
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "views", "index.html"));
+});
+
+app.post("/save-quiz", upload.fields([
+  { name: "audio", maxCount: 1 },
+  { name: "images-part1" },
+  { name: "images-part2" },
+  { name: "images-part3" },
+  { name: "images-part4" },
+  { name: "images-part5" },
+  { name: "images-part6" },
+  { name: "images-part7" },
+  { name: "answerKey" },
+]), async (req, res) => {
+  try {
+    // Save audio
+    if (req.files["audio"]) {
+      const file = req.files["audio"][0];
+      quizData.audioUrl = `/uploads/audio/${file.filename}`;
+    }
+
+    // Save images
+    quizData.images = {};
+    for (let i = 1; i <= 7; i++) {
+      const key = `images-part${i}`;
+      quizData.images[i] = [];
+      if (req.files[key]) {
+        for (let file of req.files[key]) {
+          quizData.images[i].push(`/uploads/images/${file.filename}`);
+        }
+      }
+    }
+
+    // Save answer key
+    quizData.answerKey = JSON.parse(req.body.answerKey || "{}");
+    if (Object.keys(quizData.answerKey).length !== 200) {
+      return res.status(400).json({ message: "Đáp án đúng phải có đúng 200 câu!" });
+    }
+    for (const [question, answer] of Object.entries(quizData.answerKey)) {
+      if (!["A", "B", "C", "D"].includes(answer)) {
+        return res.status(400).json({ message: `Đáp án ${question} không hợp lệ!` });
+      }
+    }
+
+    res.json({ message: "Đã lưu đề thi!" });
+  } catch (error) {
+    console.error("Save quiz error:", error);
+    res.status(500).json({ message: "Lỗi khi lưu đề thi!" });
+  }
+});
+
+app.get("/images", (req, res) => {
+  const part = req.query.part;
+  res.json(quizData.images[part] || []);
+});
+
+app.post("/submit", (req, res) => {
+  const { username, answers } = req.body;
+  let score = 0;
+
+  for (let i = 1; i <= 200; i++) {
+    if (answers[`q${i}`] && answers[`q${i}`] === quizData.answerKey[`q${i}`]) {
+      score++;
+    }
+  }
+
+  const timestamp = new Date().toISOString();
+  results.push({ username, score, timestamp });
+
+  submittedCount++;
+  broadcast({ type: "submittedCount", count: submittedCount });
+  res.json({ score, total: 200 });
+});
+
+app.get("/results", (req, res) => {
+  res.json(results);
+});
+
+app.get("/quiz-status", (req, res) => {
+  res.json({ quizExists: quizData.audioUrl || Object.keys(quizData.images).length > 0 });
+});
+
+app.post("/reset", (req, res) => {
+  quizStarted = false;
+  submittedCount = 0;
+  results = [];
+  clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: "end" }));
+    }
+  });
+  res.json({ message: "Đã reset trạng thái, sẵn sàng cho lớp mới!" });
+});
+
+// WebSocket
 wss.on("connection", (ws) => {
   clients.add(ws);
-  console.log("Client connected");
-  
-  // Send participant count to admin
   broadcastParticipantCount();
 
   ws.on("message", (message) => {
     const data = JSON.parse(message);
-
     if (data.type === "start") {
       quizStarted = true;
       broadcast({ type: "start" });
@@ -52,12 +155,6 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    clients.delete(ws);
-    broadcastParticipantCount();
-  });
-
-  ws.on("error", (error) => {
-    console.error("WebSocket Error: ", error);
     clients.delete(ws);
     broadcastParticipantCount();
   });
@@ -76,45 +173,7 @@ function broadcastParticipantCount() {
   broadcast({ type: "participantCount", count: clients.size });
 }
 
-app.post("/submit", (req, res) => {
-  const { username, answers } = req.body;
-  let score = 0;
-  let total = Object.keys(answerKey).length;
-
-  for (const key in answerKey) {
-    if (answers[key] && answers[key] === answerKey[key]) {
-      score++;
-    }
-  }
-
-  const result = { username, score, total, timestamp: new Date().toISOString() };
-
-  let results = [];
-  if (fs.existsSync("results.json")) {
-    results = JSON.parse(fs.readFileSync("results.json"));
-  }
-
-  const existingUser = results.find(r => r.username === username);
-  if (existingUser) {
-    existingUser.score = score;
-    existingUser.timestamp = result.timestamp;
-  } else {
-    results.push(result);
-  }
-
-  fs.writeFileSync("results.json", JSON.stringify(results, null, 2));
-  res.json({ score, total });
-});
-
-app.get("/results", (req, res) => {
-  if (fs.existsSync("results.json")) {
-    const results = JSON.parse(fs.readFileSync("results.json"));
-    res.json(results);
-  } else {
-    res.json([]);
-  }
-});
-
+// Start Server
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
